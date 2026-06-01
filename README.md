@@ -63,3 +63,7 @@ Open:
 - The orbital is evaluated analytically in 3D as `psi(r, theta, phi) = R_nl(r) * Y_lm(real)(theta, phi)`.
 - For each view ray through a cubic volume, the shader searches for crossings of `abs(psi) - iso = 0` and refines hit points.
 - Surface color is chosen from the sign of `psi` at the hit point, and normals are estimated numerically for shaded lighting.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
