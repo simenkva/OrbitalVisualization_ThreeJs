@@ -33,6 +33,104 @@
       padding: 8px 10px;
       backdrop-filter: blur(2px);
     }
+
+    #helpButton {
+      position: static;
+      display: block;
+      width: calc(100% - 12px);
+      margin: 8px 6px 6px;
+      border: 1px solid rgba(143, 170, 204, 0.45);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: rgba(10, 14, 22, 0.92);
+      color: #e6edf7;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #helpButton:hover {
+      background: rgba(20, 30, 46, 0.95);
+    }
+
+    #exportButton {
+      position: static;
+      display: block;
+      width: calc(100% - 12px);
+      margin: 6px 6px 8px;
+      border: 1px solid rgba(143, 170, 204, 0.45);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: rgba(10, 14, 22, 0.92);
+      color: #e6edf7;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #exportButton:hover {
+      background: rgba(20, 30, 46, 0.95);
+    }
+
+    #helpModal {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 8, 14, 0.7);
+      backdrop-filter: blur(3px);
+      padding: 20px;
+    }
+
+    #helpModal.open {
+      display: flex;
+    }
+
+    .help-card {
+      width: min(760px, 92vw);
+      max-height: min(78vh, 900px);
+      overflow-y: auto;
+      background: #0d1320;
+      border: 1px solid rgba(143, 170, 204, 0.42);
+      border-radius: 10px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      padding: 18px 18px 14px;
+      color: #d8e5f7;
+    }
+
+    .help-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .help-head h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .help-close {
+      border: 1px solid rgba(143, 170, 204, 0.45);
+      border-radius: 7px;
+      background: rgba(12, 17, 26, 1.0);
+      color: #e6edf7;
+      cursor: pointer;
+      padding: 5px 10px;
+      font-size: 13px;
+    }
+
+    .help-close:hover {
+      background: rgba(30, 41, 58, 1.0);
+    }
+
+    .help-body p {
+      margin: 8px 0;
+      line-height: 1.45;
+      color: #cdd9ea;
+      font-size: 14px;
+    }
   </style>
   <script type="importmap">
     {
@@ -47,6 +145,24 @@
 <body>
   <div id="app"></div>
   <div class="hud" id="hudText"></div>
+  <button id="helpButton" type="button">Help</button>
+  <button id="exportButton" type="button">Export image</button>
+  <div id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="help-card">
+      <div class="help-head">
+        <h2 id="helpTitle">Help</h2>
+        <button id="helpCloseButton" class="help-close" type="button">Close</button>
+      </div>
+      <div class="help-body">
+        <p>This app shows real hydrogen atom orbitals as positive and negative phases of the wavefunction.</p>
+        <p>The quantum numbers n, l, and m select which orbital you are looking at. The label under the quantum number controls gives the familiar orbital name when available.</p>
+        <p>The blue and red regions represent opposite signs of the wavefunction. A sign change across a nodal plane or nodal surface is a central feature of orbital structure.</p>
+        <p>The point cloud gives a qualitative picture of where the orbital amplitude is large. The isosurface shows a constant-value boundary of the same orbital, which helps you see nodal shapes and lobe geometry clearly.</p>
+        <p>The relative isovalue control changes how close the surface is to high-amplitude regions. Smaller values give larger, more diffuse surfaces. Larger values give tighter surfaces around orbital lobes.</p>
+        <p>The size of the viewing box scales with the expected orbital radius, so higher-n orbitals automatically use a larger spatial range.</p>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import * as THREE from 'three';
@@ -54,6 +170,10 @@
     import GUI from 'lil-gui';
 
     const app = document.getElementById('app');
+    const helpButton = document.getElementById('helpButton');
+    const exportButton = document.getElementById('exportButton');
+    const helpModal = document.getElementById('helpModal');
+    const helpCloseButton = document.getElementById('helpCloseButton');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x06080d);
@@ -152,7 +272,9 @@
       m: 0,
       showPointCloud: true,
       showIsosurfaces: true,
+      showAxes: true,
       isoRelative: 0.11,
+      orbitalName: '2p_x',
       pointCount: 80000,
       pointSize: 7.0,
       pointOpacity: 0.42,
@@ -201,6 +323,32 @@
       orbitalState.n = n;
       orbitalState.l = l;
       orbitalState.m = m;
+    }
+
+    function getOrbitalName(n, l, m) {
+      const letters = ['s', 'p', 'd', 'f', 'g', 'h', 'i'];
+      const letter = letters[l] || `l${l}`;
+
+      if (l === 0) return `${n}s`;
+      if (l === 1) {
+        if (m === 0) return `${n}p_z`;
+        if (m > 0) return `${n}p_x`;
+        return `${n}p_y`;
+      }
+      if (l === 2) {
+        if (m === 0) return `${n}d_z2`;
+        if (m === 1) return `${n}d_xz`;
+        if (m === -1) return `${n}d_yz`;
+        if (m === 2) return `${n}d_x2-y2`;
+        if (m === -2) return `${n}d_xy`;
+      }
+
+      const mPart = m >= 0 ? `+${m}` : `${m}`;
+      return `${n}${letter}_m${mPart}`;
+    }
+
+    function updateOrbitalName() {
+      params.orbitalName = getOrbitalName(orbitalState.n, orbitalState.l, orbitalState.m);
     }
 
     function updateHud() {
@@ -778,28 +926,103 @@
       raymarchUniforms.uNegColor.value.set(params.negativeColor);
     }
 
+    function setAxesVisible(visible) {
+      axisLines.visible = visible;
+      xLabel.visible = visible;
+      yLabel.visible = visible;
+      zLabel.visible = visible;
+    }
+
     clampOrbitalState();
+    updateOrbitalName();
     updateSpatialScaleAndCamera(true);
     updateIsoAbsoluteFromRadialMax();
     updateHud();
     rebuildPointClouds(params.pointCount);
     syncPointMaterialUniforms();
     syncRaymarchUniforms();
+    setAxesVisible(params.showAxes);
 
     const gui = new GUI({ title: 'Hydrogen n,l,m Controls' });
+
+    function openHelpModal() {
+      helpModal.classList.add('open');
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove('open');
+    }
+
+    function saveBlob(blob, fileName) {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    }
+
+    function exportImagePng() {
+      const menuDisplay = gui.domElement.style.display;
+      const hudDisplay = hudText.style.display;
+      const helpWasOpen = helpModal.classList.contains('open');
+
+      // Hide menu/overlay UI while capturing so export is rendering-only.
+      gui.domElement.style.display = 'none';
+      hudText.style.display = 'none';
+      closeHelpModal();
+
+      renderer.render(scene, camera);
+      const fileName = `hydrogen_orbital_n${orbitalState.n}_l${orbitalState.l}_m${orbitalState.m}.png`;
+
+      if (renderer.domElement.toBlob) {
+        renderer.domElement.toBlob((blob) => {
+          if (blob) saveBlob(blob, fileName);
+          gui.domElement.style.display = menuDisplay;
+          hudText.style.display = hudDisplay;
+          if (helpWasOpen) openHelpModal();
+        }, 'image/png');
+      } else {
+        const a = document.createElement('a');
+        a.href = renderer.domElement.toDataURL('image/png');
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        gui.domElement.style.display = menuDisplay;
+        hudText.style.display = hudDisplay;
+        if (helpWasOpen) openHelpModal();
+      }
+    }
+
+    helpButton.addEventListener('click', openHelpModal);
+    exportButton.addEventListener('click', exportImagePng);
+    helpCloseButton.addEventListener('click', closeHelpModal);
+    helpModal.addEventListener('click', (event) => {
+      if (event.target === helpModal) closeHelpModal();
+    });
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeHelpModal();
+    });
 
     const qFolder = gui.addFolder('quantum numbers');
     const nCtrl = qFolder.add(params, 'n', 1, 6, 1).name('n');
     const lCtrl = qFolder.add(params, 'l', 0, 5, 1).name('l');
     const mCtrl = qFolder.add(params, 'm', -5, 5, 1).name('m');
+    const orbitalNameCtrl = qFolder.add(params, 'orbitalName').name('Orbital name');
+    orbitalNameCtrl.disable();
 
     function applyOrbitalChange() {
       clampOrbitalState();
+      updateOrbitalName();
       updateSpatialScaleAndCamera(true);
       updateIsoAbsoluteFromRadialMax();
       nCtrl.updateDisplay();
       lCtrl.updateDisplay();
       mCtrl.updateDisplay();
+      orbitalNameCtrl.updateDisplay();
       updateHud();
       rebuildPointClouds(params.pointCount);
       syncPointMaterialUniforms();
@@ -817,29 +1040,36 @@
     gui.add(params, 'showIsosurfaces').name('show isosurfaces').onChange((v) => {
       raymarchCube.visible = v;
     });
+    gui.add(params, 'showAxes').name('show axes').onChange((v) => {
+      setAxesVisible(v);
+    });
 
-    gui.add(params, 'isoRelative', 0.0, 0.3, 0.001).name('iso rel (R max)').onChange(() => {
+    const isoFolder = gui.addFolder('isosurface');
+    isoFolder.close();
+    isoFolder.add(params, 'isoRelative', 0.0, 0.3, 0.001).name('iso rel (R max)').onChange(() => {
       isoAbsolute = params.isoRelative * maxAbsRadial;
       updateHud();
       syncRaymarchUniforms();
     });
 
-    gui.add(params, 'pointCount', 1000, 180000, 1000).name('point count').onFinishChange((v) => {
+    const pointFolder = gui.addFolder('point cloud');
+    pointFolder.close();
+    pointFolder.add(params, 'pointCount', 1000, 300000, 1000).name('point count').onFinishChange((v) => {
       params.pointCount = Math.floor(v);
       rebuildPointClouds(params.pointCount);
       syncPointMaterialUniforms();
     });
 
-    gui.add(params, 'pointSize', 2.0, 48.0, 0.1).name('point size').onChange(syncPointMaterialUniforms);
-    gui.add(params, 'pointOpacity', 0.01, 1.0, 0.01).name('point opacity').onChange(syncPointMaterialUniforms);
-    gui.add(params, 'splatSharpness', 1.0, 80.0, 0.1).name('splat sharpness').onChange(syncPointMaterialUniforms);
+    pointFolder.add(params, 'pointSize', 2.0, 48.0, 0.1).name('point size').onChange(syncPointMaterialUniforms);
+    pointFolder.add(params, 'pointOpacity', 0.01, 1.0, 0.01).name('point opacity').onChange(syncPointMaterialUniforms);
+    pointFolder.add(params, 'splatSharpness', 1.0, 80.0, 0.1).name('splat sharpness').onChange(syncPointMaterialUniforms);
 
-    gui.add(params, 'rayStepCount', 16, 1024, 1).name('ray step count').onChange(syncRaymarchUniforms);
-    gui.add(params, 'rayStepRelative', 0.0005, 0.05, 0.0001).name('ray step rel').onChange(syncRaymarchUniforms);
-    gui.add(params, 'surfaceOpacity', 0.02, 1.0, 0.01).name('surface opacity').onChange(syncRaymarchUniforms);
-    gui.add(params, 'lightOffsetRight', -60.0, 60.0, 0.1).name('light right');
-    gui.add(params, 'lightOffsetUp', -60.0, 60.0, 0.1).name('light up');
-    gui.add(params, 'lightOffsetForward', -60.0, 60.0, 0.1).name('light forward');
+    isoFolder.add(params, 'rayStepCount', 16, 1024, 1).name('ray step count').onChange(syncRaymarchUniforms);
+    isoFolder.add(params, 'rayStepRelative', 0.0005, 0.05, 0.0001).name('ray step rel').onChange(syncRaymarchUniforms);
+    isoFolder.add(params, 'surfaceOpacity', 0.02, 1.0, 0.01).name('surface opacity').onChange(syncRaymarchUniforms);
+    isoFolder.add(params, 'lightOffsetRight', -60.0, 60.0, 0.1).name('light right');
+    isoFolder.add(params, 'lightOffsetUp', -60.0, 60.0, 0.1).name('light up');
+    isoFolder.add(params, 'lightOffsetForward', -60.0, 60.0, 0.1).name('light forward');
 
     gui.addColor(params, 'positiveColor').name('positive color').onChange(() => {
       syncPointMaterialUniforms();
@@ -850,6 +1080,10 @@
       syncPointMaterialUniforms();
       syncRaymarchUniforms();
     });
+
+    // Keep Help directly under the GUI menu regardless of folder toggles.
+    gui.domElement.appendChild(helpButton);
+    gui.domElement.appendChild(exportButton);
 
     function onResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
