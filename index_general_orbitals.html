@@ -155,7 +155,7 @@
       pointOpacity: 0.42,
       splatSharpness: 18.0,
       rayStepCount: 640,
-      rayStepSize: 0.10,
+      rayStepRelative: 0.0067,
       surfaceOpacity: 0.55,
       lightOffsetRight: -20.0,
       lightOffsetUp: 18.0,
@@ -164,7 +164,18 @@
       negativeColor: '#ff6347'
     };
 
-    const volumeHalfExtent = 20.0;
+    // Hydrogen expectation value in atomic units (a0 = 1):
+    // <r> = 0.5 * (3 n^2 - l(l+1)).
+    // We size the raymarch box with half-extent ~= 3 * <r>.
+    function expectedRadiusHydrogen(n, l) {
+      return 0.5 * (3.0 * n * n - l * (l + 1.0));
+    }
+
+    function computeRaymarchHalfExtent(n, l) {
+      return Math.max(6.0, 3.0 * expectedRadiusHydrogen(n, l));
+    }
+
+    let currentVolumeHalfExtent = computeRaymarchHalfExtent(2, 1);
     const hudText = document.getElementById('hudText');
     const orbitalState = { n: 2, l: 1, m: 0 };
 
@@ -189,7 +200,8 @@
     function updateHud() {
       hudText.textContent =
         `Hydrogen real orbital: n=${orbitalState.n}, l=${orbitalState.l}, m=${orbitalState.m} | ` +
-        `psi(r,theta,phi) = R_nl(r) * Y_lm_real(theta,phi)`;
+        `psi(r,theta,phi) = R_nl(r) * Y_lm_real(theta,phi) | ` +
+        `box half-extent = ${currentVolumeHalfExtent.toFixed(2)} a0`;
     }
 
     function factorialInt(n) {
@@ -422,13 +434,13 @@
     const raymarchUniforms = {
       uIso: { value: params.isoValue },
       uRayStepCount: { value: params.rayStepCount },
-      uStepSize: { value: params.rayStepSize },
+      uStepSize: { value: Math.max(1e-4, params.rayStepRelative * currentVolumeHalfExtent) },
       uSurfaceOpacity: { value: params.surfaceOpacity },
       uN: { value: orbitalState.n },
       uL: { value: orbitalState.l },
       uM: { value: orbitalState.m },
-      uBoxMin: { value: new THREE.Vector3(-volumeHalfExtent, -volumeHalfExtent, -volumeHalfExtent) },
-      uBoxMax: { value: new THREE.Vector3(volumeHalfExtent, volumeHalfExtent, volumeHalfExtent) },
+      uBoxMin: { value: new THREE.Vector3(-currentVolumeHalfExtent, -currentVolumeHalfExtent, -currentVolumeHalfExtent) },
+      uBoxMax: { value: new THREE.Vector3(currentVolumeHalfExtent, currentVolumeHalfExtent, currentVolumeHalfExtent) },
       uPosColor: { value: new THREE.Color(params.positiveColor) },
       uNegColor: { value: new THREE.Color(params.negativeColor) },
       uInvModelMatrix: { value: new THREE.Matrix4() },
@@ -669,12 +681,49 @@
     });
 
     const raymarchCube = new THREE.Mesh(
-      new THREE.BoxGeometry(volumeHalfExtent * 2.0, volumeHalfExtent * 2.0, volumeHalfExtent * 2.0),
+      new THREE.BoxGeometry(currentVolumeHalfExtent * 2.0, currentVolumeHalfExtent * 2.0, currentVolumeHalfExtent * 2.0),
       raymarchMat
     );
     raymarchCube.renderOrder = 10;
     raymarchCube.visible = params.showIsosurfaces;
     scene.add(raymarchCube);
+
+    function updateSpatialScaleAndCamera(reframeCamera = true) {
+      currentVolumeHalfExtent = computeRaymarchHalfExtent(orbitalState.n, orbitalState.l);
+
+      raymarchUniforms.uBoxMin.value.set(
+        -currentVolumeHalfExtent,
+        -currentVolumeHalfExtent,
+        -currentVolumeHalfExtent
+      );
+      raymarchUniforms.uBoxMax.value.set(
+        currentVolumeHalfExtent,
+        currentVolumeHalfExtent,
+        currentVolumeHalfExtent
+      );
+
+      raymarchCube.geometry.dispose();
+      raymarchCube.geometry = new THREE.BoxGeometry(
+        currentVolumeHalfExtent * 2.0,
+        currentVolumeHalfExtent * 2.0,
+        currentVolumeHalfExtent * 2.0
+      );
+
+      if (!reframeCamera) return;
+
+      const viewDir = new THREE.Vector3().copy(camera.position).sub(controls.target);
+      if (viewDir.lengthSq() < 1e-8) viewDir.set(1.0, 0.75, 1.0);
+      viewDir.normalize();
+
+      const desiredDistance = Math.max(14.0, 2.35 * currentVolumeHalfExtent);
+      camera.position.copy(controls.target).addScaledVector(viewDir, desiredDistance);
+
+      controls.minDistance = Math.max(3.0, 0.45 * currentVolumeHalfExtent);
+      controls.maxDistance = Math.max(80.0, 12.0 * currentVolumeHalfExtent);
+      camera.near = Math.max(0.05, 0.01 * currentVolumeHalfExtent);
+      camera.far = Math.max(500.0, 25.0 * currentVolumeHalfExtent);
+      camera.updateProjectionMatrix();
+    }
 
     function syncPointMaterialUniforms() {
       if (!posPointMat || !negPointMat) return;
@@ -695,7 +744,7 @@
     function syncRaymarchUniforms() {
       raymarchUniforms.uIso.value = params.isoValue;
       raymarchUniforms.uRayStepCount.value = Math.max(1, params.rayStepCount);
-      raymarchUniforms.uStepSize.value = params.rayStepSize;
+      raymarchUniforms.uStepSize.value = Math.max(1e-4, params.rayStepRelative * currentVolumeHalfExtent);
       raymarchUniforms.uSurfaceOpacity.value = params.surfaceOpacity;
       raymarchUniforms.uN.value = orbitalState.n;
       raymarchUniforms.uL.value = orbitalState.l;
@@ -705,6 +754,7 @@
     }
 
     clampOrbitalState();
+    updateSpatialScaleAndCamera(true);
     updateHud();
     rebuildPointClouds(params.pointCount);
     syncPointMaterialUniforms();
@@ -719,6 +769,7 @@
 
     function applyOrbitalChange() {
       clampOrbitalState();
+      updateSpatialScaleAndCamera(true);
       nCtrl.updateDisplay();
       lCtrl.updateDisplay();
       mCtrl.updateDisplay();
@@ -753,7 +804,7 @@
     gui.add(params, 'splatSharpness', 1.0, 80.0, 0.1).name('splat sharpness').onChange(syncPointMaterialUniforms);
 
     gui.add(params, 'rayStepCount', 16, 1024, 1).name('ray step count').onChange(syncRaymarchUniforms);
-    gui.add(params, 'rayStepSize', 0.02, 1.0, 0.005).name('ray step size').onChange(syncRaymarchUniforms);
+    gui.add(params, 'rayStepRelative', 0.0005, 0.05, 0.0001).name('ray step rel').onChange(syncRaymarchUniforms);
     gui.add(params, 'surfaceOpacity', 0.02, 1.0, 0.01).name('surface opacity').onChange(syncRaymarchUniforms);
     gui.add(params, 'lightOffsetRight', -60.0, 60.0, 0.1).name('light right');
     gui.add(params, 'lightOffsetUp', -60.0, 60.0, 0.1).name('light up');
