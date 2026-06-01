@@ -1,0 +1,126 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #06080d;
+  color: #e6edf7;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+.hud {
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #9bb0c8;
+  pointer-events: none;
+  background: rgba(6, 8, 13, 0.55);
+  border: 1px solid rgba(143, 170, 204, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  backdrop-filter: blur(2px);
+}
+
+#helpButton {
+  position: static;
+  display: block;
+  width: calc(100% - 12px);
+  margin: 8px 6px 6px;
+  border: 1px solid rgba(143, 170, 204, 0.45);
+  border-radius: 7px;
+  padding: 7px 12px;
+  background: rgba(10, 14, 22, 0.92);
+  color: #e6edf7;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#helpButton:hover {
+  background: rgba(20, 30, 46, 0.95);
+}
+
+#exportButton {
+  position: static;
+  display: block;
+  width: calc(100% - 12px);
+  margin: 6px 6px 8px;
+  border: 1px solid rgba(143, 170, 204, 0.45);
+  border-radius: 7px;
+  padding: 7px 12px;
+  background: rgba(10, 14, 22, 0.92);
+  color: #e6edf7;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#exportButton:hover {
+  background: rgba(20, 30, 46, 0.95);
+}
+
+#helpModal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 14, 0.7);
+  backdrop-filter: blur(3px);
+  padding: 20px;
+}
+
+#helpModal.open {
+  display: flex;
+}
+
+.help-card {
+  width: min(760px, 92vw);
+  max-height: min(78vh, 900px);
+  overflow-y: auto;
+  background: #0d1320;
+  border: 1px solid rgba(143, 170, 204, 0.42);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  padding: 18px 18px 14px;
+  color: #d8e5f7;
+}
+
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.help-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.help-close {
+  border: 1px solid rgba(143, 170, 204, 0.45);
+  border-radius: 7px;
+  background: rgba(12, 17, 26, 1.0);
+  color: #e6edf7;
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.help-close:hover {
+  background: rgba(30, 41, 58, 1.0);
+}
+
+.help-body p {
+  margin: 8px 0;
+  line-height: 1.45;
+  color: #cdd9ea;
+  font-size: 14px;
+}
