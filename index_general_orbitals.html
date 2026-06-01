@@ -149,13 +149,13 @@
       m: 0,
       showPointCloud: true,
       showIsosurfaces: true,
-      isoValue: 0.08,
-      pointCount: 70000,
-      pointSize: 24.0,
+      isoRelative: 0.11,
+      pointCount: 80000,
+      pointSize: 7.0,
       pointOpacity: 0.42,
       splatSharpness: 18.0,
       rayStepCount: 640,
-      rayStepRelative: 0.0067,
+      rayStepRelative: 0.025,
       surfaceOpacity: 0.55,
       lightOffsetRight: -20.0,
       lightOffsetUp: 18.0,
@@ -172,12 +172,15 @@
     }
 
     function computeRaymarchHalfExtent(n, l) {
-      return Math.max(6.0, 3.0 * expectedRadiusHydrogen(n, l));
+      const factor = n === 1 ? 6.0 : 3.0;
+      return Math.max(6.0, factor * expectedRadiusHydrogen(n, l));
     }
 
     let currentVolumeHalfExtent = computeRaymarchHalfExtent(2, 1);
     const hudText = document.getElementById('hudText');
     const orbitalState = { n: 2, l: 1, m: 0 };
+    let maxAbsRadial = 1.0;
+    let isoAbsolute = params.isoRelative * maxAbsRadial;
 
     function clampOrbitalState() {
       let n = Math.round(params.n);
@@ -201,7 +204,8 @@
       hudText.textContent =
         `Hydrogen real orbital: n=${orbitalState.n}, l=${orbitalState.l}, m=${orbitalState.m} | ` +
         `psi(r,theta,phi) = R_nl(r) * Y_lm_real(theta,phi) | ` +
-        `box half-extent = ${currentVolumeHalfExtent.toFixed(2)} a0`;
+        `box half-extent = ${currentVolumeHalfExtent.toFixed(2)} a0 | ` +
+        `iso rel=${params.isoRelative.toFixed(3)} (abs=${isoAbsolute.toExponential(2)}, max|R|=${maxAbsRadial.toExponential(2)})`;
     }
 
     function factorialInt(n) {
@@ -272,6 +276,24 @@
       const rho = (2.0 * r) / n;
       const k = n - l - 1;
       return Math.exp(-0.5 * rho) * Math.pow(Math.max(rho, 0.0), l) * assocLaguerre(k, 2 * l + 1, rho);
+    }
+
+    function estimateMaxAbsRadial(n, l) {
+      const rMax = Math.max(40.0, 12.0 * n * n);
+      const samples = 5000;
+      let maxR = 0.0;
+      for (let i = 0; i <= samples; i++) {
+        const r = rMax * (i / samples);
+        const v = Math.abs(radialShapeHydrogen(n, l, r));
+        if (v > maxR) maxR = v;
+      }
+      return Math.max(maxR, 1e-12);
+    }
+
+    // Relative isovalue requested: isoAbsolute = isoRelative * max|R_nl|.
+    function updateIsoAbsoluteFromRadialMax() {
+      maxAbsRadial = estimateMaxAbsRadial(orbitalState.n, orbitalState.l);
+      isoAbsolute = params.isoRelative * maxAbsRadial;
     }
 
     function psiRealHydrogenCartesian(x, y, z, n, l, m) {
@@ -432,7 +454,7 @@
     }
 
     const raymarchUniforms = {
-      uIso: { value: params.isoValue },
+      uIso: { value: isoAbsolute },
       uRayStepCount: { value: params.rayStepCount },
       uStepSize: { value: Math.max(1e-4, params.rayStepRelative * currentVolumeHalfExtent) },
       uSurfaceOpacity: { value: params.surfaceOpacity },
@@ -742,7 +764,7 @@
     }
 
     function syncRaymarchUniforms() {
-      raymarchUniforms.uIso.value = params.isoValue;
+      raymarchUniforms.uIso.value = isoAbsolute;
       raymarchUniforms.uRayStepCount.value = Math.max(1, params.rayStepCount);
       raymarchUniforms.uStepSize.value = Math.max(1e-4, params.rayStepRelative * currentVolumeHalfExtent);
       raymarchUniforms.uSurfaceOpacity.value = params.surfaceOpacity;
@@ -755,6 +777,7 @@
 
     clampOrbitalState();
     updateSpatialScaleAndCamera(true);
+    updateIsoAbsoluteFromRadialMax();
     updateHud();
     rebuildPointClouds(params.pointCount);
     syncPointMaterialUniforms();
@@ -770,6 +793,7 @@
     function applyOrbitalChange() {
       clampOrbitalState();
       updateSpatialScaleAndCamera(true);
+      updateIsoAbsoluteFromRadialMax();
       nCtrl.updateDisplay();
       lCtrl.updateDisplay();
       mCtrl.updateDisplay();
@@ -791,7 +815,11 @@
       raymarchCube.visible = v;
     });
 
-    gui.add(params, 'isoValue', 0.005, 0.2, 0.001).name('iso value').onChange(syncRaymarchUniforms);
+    gui.add(params, 'isoRelative', 0.0, 0.3, 0.001).name('iso rel (R max)').onChange(() => {
+      isoAbsolute = params.isoRelative * maxAbsRadial;
+      updateHud();
+      syncRaymarchUniforms();
+    });
 
     gui.add(params, 'pointCount', 1000, 180000, 1000).name('point count').onFinishChange((v) => {
       params.pointCount = Math.floor(v);
