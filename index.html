@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hydrogen 2p_z Orbital Test (Points + Raymarch)</title>
+  <title>Hydrogen Orbital Explorer (Real n,l,m)</title>
   <style>
     html, body {
       margin: 0;
@@ -33,6 +33,104 @@
       padding: 8px 10px;
       backdrop-filter: blur(2px);
     }
+
+    #helpButton {
+      position: static;
+      display: block;
+      width: calc(100% - 12px);
+      margin: 8px 6px 6px;
+      border: 1px solid rgba(143, 170, 204, 0.45);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: rgba(10, 14, 22, 0.92);
+      color: #e6edf7;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #helpButton:hover {
+      background: rgba(20, 30, 46, 0.95);
+    }
+
+    #exportButton {
+      position: static;
+      display: block;
+      width: calc(100% - 12px);
+      margin: 6px 6px 8px;
+      border: 1px solid rgba(143, 170, 204, 0.45);
+      border-radius: 7px;
+      padding: 7px 12px;
+      background: rgba(10, 14, 22, 0.92);
+      color: #e6edf7;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #exportButton:hover {
+      background: rgba(20, 30, 46, 0.95);
+    }
+
+    #helpModal {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 8, 14, 0.7);
+      backdrop-filter: blur(3px);
+      padding: 20px;
+    }
+
+    #helpModal.open {
+      display: flex;
+    }
+
+    .help-card {
+      width: min(760px, 92vw);
+      max-height: min(78vh, 900px);
+      overflow-y: auto;
+      background: #0d1320;
+      border: 1px solid rgba(143, 170, 204, 0.42);
+      border-radius: 10px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      padding: 18px 18px 14px;
+      color: #d8e5f7;
+    }
+
+    .help-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .help-head h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .help-close {
+      border: 1px solid rgba(143, 170, 204, 0.45);
+      border-radius: 7px;
+      background: rgba(12, 17, 26, 1.0);
+      color: #e6edf7;
+      cursor: pointer;
+      padding: 5px 10px;
+      font-size: 13px;
+    }
+
+    .help-close:hover {
+      background: rgba(30, 41, 58, 1.0);
+    }
+
+    .help-body p {
+      margin: 8px 0;
+      line-height: 1.45;
+      color: #cdd9ea;
+      font-size: 14px;
+    }
   </style>
   <script type="importmap">
     {
@@ -46,16 +144,36 @@
 </head>
 <body>
   <div id="app"></div>
-  <div class="hud">
-    Hydrogen 2p_z: ψ(x,y,z) = z · exp(-r/2), r = √(x²+y²+z²)
+  <div class="hud" id="hudText"></div>
+  <button id="helpButton" type="button">Help</button>
+  <button id="exportButton" type="button">Export image</button>
+  <div id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="help-card">
+      <div class="help-head">
+        <h2 id="helpTitle">Help</h2>
+        <button id="helpCloseButton" class="help-close" type="button">Close</button>
+      </div>
+      <div class="help-body">
+        <p>This app shows real hydrogen atom orbitals as positive and negative phases of the wavefunction.</p>
+        <p>The quantum numbers n, l, and m select which orbital you are looking at. The label under the quantum number controls gives the familiar orbital name when available.</p>
+        <p>The blue and red regions represent opposite signs of the wavefunction. A sign change across a nodal plane or nodal surface is a central feature of orbital structure.</p>
+        <p>The point cloud gives a qualitative picture of where the orbital amplitude is large. The isosurface shows a constant-value boundary of the same orbital, which helps you see nodal shapes and lobe geometry clearly.</p>
+        <p>The relative isovalue control changes how close the surface is to high-amplitude regions. Smaller values give larger, more diffuse surfaces. Larger values give tighter surfaces around orbital lobes.</p>
+        <p>The size of the viewing box scales with the expected orbital radius, so higher-n orbitals automatically use a larger spatial range.</p>
+      </div>
+    </div>
   </div>
 
   <script type="module">
     import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
     import GUI from 'lil-gui';
 
     const app = document.getElementById('app');
+    const helpButton = document.getElementById('helpButton');
+    const exportButton = document.getElementById('exportButton');
+    const helpModal = document.getElementById('helpModal');
+    const helpCloseButton = document.getElementById('helpCloseButton');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x06080d);
@@ -69,9 +187,12 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     app.appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new TrackballControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
-    controls.enableDamping = true;
+    controls.rotateSpeed = 3.0;
+    controls.zoomSpeed = 1.2;
+    controls.panSpeed = 0.8;
+    controls.dynamicDampingFactor = 0.12;
     controls.minDistance = 12.0;
     controls.maxDistance = 140.0;
 
@@ -146,15 +267,20 @@
     scene.add(pointGroup);
 
     const params = {
+      n: 2,
+      l: 1,
+      m: 0,
       showPointCloud: true,
       showIsosurfaces: true,
-      isoValue: 0.08,
-      pointCount: 70000,
-      pointSize: 24.0,
+      showAxes: true,
+      isoRelative: 0.11,
+      orbitalName: '2p_x',
+      pointCount: 80000,
+      pointSize: 7.0,
       pointOpacity: 0.42,
       splatSharpness: 18.0,
       rayStepCount: 640,
-      rayStepSize: 0.10,
+      rayStepRelative: 0.025,
       surfaceOpacity: 0.55,
       lightOffsetRight: -20.0,
       lightOffsetUp: 18.0,
@@ -163,45 +289,233 @@
       negativeColor: '#ff6347'
     };
 
-    const volumeHalfExtent = 20.0;
-
-    // Integer-shape gamma sampler: Gamma(k=4, scale=0.5) = sum of 4 exponentials with scale 0.5.
-    // This gives the exact radial distribution requested for 2p_z |psi| sampling in this test.
-    function sampleGammaK4ScaleHalf() {
-      let product = 1.0;
-      for (let i = 0; i < 4; i++) {
-        product *= Math.max(Math.random(), 1e-12);
-      }
-      return -0.5 * Math.log(product);
+    // Hydrogen expectation value in atomic units (a0 = 1):
+    // <r> = 0.5 * (3 n^2 - l(l+1)).
+    // We size the raymarch box with half-extent ~= 3 * <r>.
+    function expectedRadiusHydrogen(n, l) {
+      return 0.5 * (3.0 * n * n - l * (l + 1.0));
     }
 
-    // 2p_z sampling distribution used here:
-    // - r ~ Gamma(4, 0.5)
-    // - phi uniform in [0, 2pi)
-    // - |cos(theta)| = sqrt(u), u~U(0,1), sign(cos(theta)) random +/-
-    // Positive and negative phase are separated by sign(z) because psi = z*exp(-r/2).
-    function generate2pzSamples(totalCount) {
+    function computeRaymarchHalfExtent(n, l) {
+      const factor = n === 1 ? 6.0 : 3.0;
+      return Math.max(6.0, factor * expectedRadiusHydrogen(n, l));
+    }
+
+    let currentVolumeHalfExtent = computeRaymarchHalfExtent(2, 1);
+    const hudText = document.getElementById('hudText');
+    const orbitalState = { n: 2, l: 1, m: 0 };
+    let maxAbsRadial = 1.0;
+    let isoAbsolute = params.isoRelative * maxAbsRadial;
+
+    function clampOrbitalState() {
+      let n = Math.round(params.n);
+      n = Math.max(1, Math.min(6, n));
+
+      let l = Math.round(params.l);
+      l = Math.max(0, Math.min(n - 1, l));
+
+      let m = Math.round(params.m);
+      m = Math.max(-l, Math.min(l, m));
+
+      params.n = n;
+      params.l = l;
+      params.m = m;
+      orbitalState.n = n;
+      orbitalState.l = l;
+      orbitalState.m = m;
+    }
+
+    function getOrbitalName(n, l, m) {
+      const letters = ['s', 'p', 'd', 'f', 'g', 'h', 'i'];
+      const letter = letters[l] || `l${l}`;
+
+      if (l === 0) return `${n}s`;
+      if (l === 1) {
+        if (m === 0) return `${n}p_z`;
+        if (m > 0) return `${n}p_x`;
+        return `${n}p_y`;
+      }
+      if (l === 2) {
+        if (m === 0) return `${n}d_z2`;
+        if (m === 1) return `${n}d_xz`;
+        if (m === -1) return `${n}d_yz`;
+        if (m === 2) return `${n}d_x2-y2`;
+        if (m === -2) return `${n}d_xy`;
+      }
+
+      const mPart = m >= 0 ? `+${m}` : `${m}`;
+      return `${n}${letter}_m${mPart}`;
+    }
+
+    function updateOrbitalName() {
+      params.orbitalName = getOrbitalName(orbitalState.n, orbitalState.l, orbitalState.m);
+    }
+
+    function updateHud() {
+      hudText.textContent =
+        `Hydrogen real orbital: n=${orbitalState.n}, l=${orbitalState.l}, m=${orbitalState.m} | ` +
+        `psi(r,theta,phi) = R_nl(r) * Y_lm_real(theta,phi) | ` +
+        `box half-extent = ${currentVolumeHalfExtent.toFixed(2)} a0 | ` +
+        `iso rel=${params.isoRelative.toFixed(3)} (abs=${isoAbsolute.toExponential(2)}, max|R|=${maxAbsRadial.toExponential(2)})`;
+    }
+
+    function factorialInt(n) {
+      let f = 1;
+      for (let i = 2; i <= n; i++) f *= i;
+      return f;
+    }
+
+    function assocLaguerre(k, alpha, x) {
+      if (k === 0) return 1.0;
+      if (k === 1) return 1.0 + alpha - x;
+
+      let lm2 = 1.0;
+      let lm1 = 1.0 + alpha - x;
+      let lk = lm1;
+      for (let i = 2; i <= k; i++) {
+        lk = ((2 * i - 1 + alpha - x) * lm1 - (i - 1 + alpha) * lm2) / i;
+        lm2 = lm1;
+        lm1 = lk;
+      }
+      return lk;
+    }
+
+    function assocLegendre(l, m, x) {
+      if (m < 0 || m > l) return 0.0;
+      const xc = Math.max(-1.0, Math.min(1.0, x));
+
+      let pmm = 1.0;
+      if (m > 0) {
+        const somx2 = Math.sqrt(Math.max(0.0, 1.0 - xc * xc));
+        let fact = 1.0;
+        for (let i = 1; i <= m; i++) {
+          pmm *= -fact * somx2;
+          fact += 2.0;
+        }
+      }
+      if (l === m) return pmm;
+
+      let pmmp1 = xc * (2 * m + 1) * pmm;
+      if (l === m + 1) return pmmp1;
+
+      let pll = pmmp1;
+      let pprev = pmm;
+      let pcurr = pmmp1;
+      for (let ll = m + 2; ll <= l; ll++) {
+        pll = ((2 * ll - 1) * xc * pcurr - (ll + m - 1) * pprev) / (ll - m);
+        pprev = pcurr;
+        pcurr = pll;
+      }
+      return pll;
+    }
+
+    function realSphericalHarmonic(l, m, theta, phi) {
+      const mAbs = Math.abs(m);
+      const ct = Math.cos(theta);
+      const p = assocLegendre(l, mAbs, ct);
+      const norm = Math.sqrt(
+        ((2 * l + 1) / (4 * Math.PI)) *
+        (factorialInt(l - mAbs) / factorialInt(l + mAbs))
+      );
+
+      if (m > 0) return Math.SQRT2 * norm * p * Math.cos(mAbs * phi);
+      if (m < 0) return Math.SQRT2 * norm * p * Math.sin(mAbs * phi);
+      return norm * p;
+    }
+
+    function radialShapeHydrogen(n, l, r) {
+      const rho = (2.0 * r) / n;
+      const k = n - l - 1;
+      return Math.exp(-0.5 * rho) * Math.pow(Math.max(rho, 0.0), l) * assocLaguerre(k, 2 * l + 1, rho);
+    }
+
+    function estimateMaxAbsRadial(n, l) {
+      const rMax = Math.max(40.0, 12.0 * n * n);
+      const samples = 5000;
+      let maxR = 0.0;
+      for (let i = 0; i <= samples; i++) {
+        const r = rMax * (i / samples);
+        const v = Math.abs(radialShapeHydrogen(n, l, r));
+        if (v > maxR) maxR = v;
+      }
+      return Math.max(maxR, 1e-12);
+    }
+
+    // Relative isovalue requested: isoAbsolute = isoRelative * max|R_nl|.
+    function updateIsoAbsoluteFromRadialMax() {
+      maxAbsRadial = estimateMaxAbsRadial(orbitalState.n, orbitalState.l);
+      isoAbsolute = params.isoRelative * maxAbsRadial;
+    }
+
+    function psiRealHydrogenCartesian(x, y, z, n, l, m) {
+      const r = Math.hypot(x, y, z);
+      if (r < 1e-8) {
+        if (l > 0) return 0.0;
+        return radialShapeHydrogen(n, l, 0.0) * realSphericalHarmonic(l, m, 0.0, 0.0);
+      }
+
+      const ct = Math.max(-1.0, Math.min(1.0, z / r));
+      const theta = Math.acos(ct);
+      const phi = Math.atan2(y, x);
+      return radialShapeHydrogen(n, l, r) * realSphericalHarmonic(l, m, theta, phi);
+    }
+
+    function sampleStandardNormal() {
+      const u1 = Math.max(Math.random(), 1e-12);
+      const u2 = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+    }
+
+    // Generic |psi| sampling for arbitrary real hydrogen orbitals:
+    // We use a Metropolis random walk in 3D with target density proportional to |psi|.
+    // Positive and negative phase are then separated by sign(psi) at each accepted sample.
+    function generateOrbitalSamples(totalCount, n, l, m) {
       const pos = [];
       const neg = [];
+      const targetCount = Math.max(1000, Math.floor(totalCount));
+      const stepSigma = Math.max(0.8, 0.50 * n * n);
+      const safetyMaxRadius = Math.max(120.0, 12.0 * n * n);
 
-      for (let i = 0; i < totalCount; i++) {
-        const r = sampleGammaK4ScaleHalf();
+      let cx = (Math.random() * 2.0 - 1.0) * 0.5;
+      let cy = (Math.random() * 2.0 - 1.0) * 0.5;
+      let cz = (Math.random() * 2.0 - 1.0) * 0.5;
+      let cAbs = Math.abs(psiRealHydrogenCartesian(cx, cy, cz, n, l, m)) + 1e-14;
 
-        const phi = Math.random() * Math.PI * 2.0;
-        const absCosTheta = Math.sqrt(Math.random());
-        const cosSign = Math.random() < 0.5 ? -1.0 : 1.0;
-        const cosTheta = cosSign * absCosTheta;
-        const sinTheta = Math.sqrt(Math.max(0.0, 1.0 - cosTheta * cosTheta));
+      const burnIn = 2500;
+      const thin = 2;
+      const maxIterations = burnIn + targetCount * 200;
+      let savedSteps = 0;
 
-        const x = r * sinTheta * Math.cos(phi);
-        const y = r * sinTheta * Math.sin(phi);
-        const z = r * cosTheta;
-
-        if (z >= 0.0) {
-          pos.push(x, y, z);
-        } else {
-          neg.push(x, y, z);
+      for (let iter = 0; iter < maxIterations; iter++) {
+        const nx = cx + stepSigma * sampleStandardNormal();
+        const ny = cy + stepSigma * sampleStandardNormal();
+        const nz = cz + stepSigma * sampleStandardNormal();
+        const nr = Math.hypot(nx, ny, nz);
+        // Do not clip to the render volume or any tight sphere; that distorts the
+        // orbital cloud. Keep only a very loose safety bound for random-walk stability.
+        if (nr < safetyMaxRadius) {
+          const nAbs = Math.abs(psiRealHydrogenCartesian(nx, ny, nz, n, l, m)) + 1e-14;
+          const ratio = nAbs / cAbs;
+          if (ratio >= 1.0 || Math.random() < ratio) {
+            cx = nx;
+            cy = ny;
+            cz = nz;
+            cAbs = nAbs;
+          }
         }
+
+        if (iter < burnIn) continue;
+        savedSteps++;
+        if (savedSteps % thin !== 0) continue;
+
+        const psi = psiRealHydrogenCartesian(cx, cy, cz, n, l, m);
+        if (psi >= 0.0) {
+          pos.push(cx, cy, cz);
+        } else {
+          neg.push(cx, cy, cz);
+        }
+
+        if ((pos.length + neg.length) / 3 >= targetCount) break;
       }
 
       return {
@@ -272,7 +586,7 @@
         negPoints = null;
       }
 
-      const samples = generate2pzSamples(totalCount);
+      const samples = generateOrbitalSamples(totalCount, orbitalState.n, orbitalState.l, orbitalState.m);
 
       const posGeom = new THREE.BufferGeometry();
       posGeom.setAttribute('position', new THREE.BufferAttribute(samples.positive, 3));
@@ -291,12 +605,15 @@
     }
 
     const raymarchUniforms = {
-      uIso: { value: params.isoValue },
+      uIso: { value: isoAbsolute },
       uRayStepCount: { value: params.rayStepCount },
-      uStepSize: { value: params.rayStepSize },
+      uStepSize: { value: Math.max(1e-4, params.rayStepRelative * currentVolumeHalfExtent) },
       uSurfaceOpacity: { value: params.surfaceOpacity },
-      uBoxMin: { value: new THREE.Vector3(-volumeHalfExtent, -volumeHalfExtent, -volumeHalfExtent) },
-      uBoxMax: { value: new THREE.Vector3(volumeHalfExtent, volumeHalfExtent, volumeHalfExtent) },
+      uN: { value: orbitalState.n },
+      uL: { value: orbitalState.l },
+      uM: { value: orbitalState.m },
+      uBoxMin: { value: new THREE.Vector3(-currentVolumeHalfExtent, -currentVolumeHalfExtent, -currentVolumeHalfExtent) },
+      uBoxMax: { value: new THREE.Vector3(currentVolumeHalfExtent, currentVolumeHalfExtent, currentVolumeHalfExtent) },
       uPosColor: { value: new THREE.Color(params.positiveColor) },
       uNegColor: { value: new THREE.Color(params.negativeColor) },
       uInvModelMatrix: { value: new THREE.Matrix4() },
@@ -328,6 +645,9 @@
         uniform float uRayStepCount;
         uniform float uStepSize;
         uniform float uSurfaceOpacity;
+        uniform float uN;
+        uniform float uL;
+        uniform float uM;
         uniform vec3 uBoxMin;
         uniform vec3 uBoxMax;
         uniform vec3 uPosColor;
@@ -340,9 +660,90 @@
         uniform vec3 uCamForward;
         uniform vec3 uLightWorldPos;
 
+        float fact(int n) {
+          float f = 1.0;
+          for (int i = 2; i <= 16; i++) {
+            if (i > n) break;
+            f *= float(i);
+          }
+          return f;
+        }
+
+        float assocLaguerre(int k, int alpha, float x) {
+          if (k == 0) return 1.0;
+          if (k == 1) return 1.0 + float(alpha) - x;
+          float lm2 = 1.0;
+          float lm1 = 1.0 + float(alpha) - x;
+          float lk = lm1;
+          for (int i = 2; i <= 20; i++) {
+            if (i > k) break;
+            float fi = float(i);
+            lk = ((2.0 * fi - 1.0 + float(alpha) - x) * lm1 - (fi - 1.0 + float(alpha)) * lm2) / fi;
+            lm2 = lm1;
+            lm1 = lk;
+          }
+          return lk;
+        }
+
+        float assocLegendre(int l, int m, float x) {
+          float xc = clamp(x, -1.0, 1.0);
+          float pmm = 1.0;
+          if (m > 0) {
+            float somx2 = sqrt(max(0.0, 1.0 - xc * xc));
+            float pref = 1.0;
+            for (int i = 1; i <= 12; i++) {
+              if (i > m) break;
+              pmm *= -pref * somx2;
+              pref += 2.0;
+            }
+          }
+          if (l == m) return pmm;
+
+          float pmmp1 = xc * float(2 * m + 1) * pmm;
+          if (l == m + 1) return pmmp1;
+
+          float pll = pmmp1;
+          float pprev = pmm;
+          float pcurr = pmmp1;
+          for (int ll = 2; ll <= 16; ll++) {
+            if (ll <= m + 1) continue;
+            if (ll > l) break;
+            pll = (float(2 * ll - 1) * xc * pcurr - float(ll + m - 1) * pprev) / float(ll - m);
+            pprev = pcurr;
+            pcurr = pll;
+          }
+          return pll;
+        }
+
+        float realYlm(int l, int m, float theta, float phi) {
+          int ma = abs(m);
+          float p = assocLegendre(l, ma, cos(theta));
+          float norm = sqrt(((2.0 * float(l) + 1.0) / (4.0 * 3.141592653589793)) * (fact(l - ma) / fact(l + ma)));
+          if (m > 0) return 1.4142135623730951 * norm * p * cos(float(ma) * phi);
+          if (m < 0) return 1.4142135623730951 * norm * p * sin(float(ma) * phi);
+          return norm * p;
+        }
+
+        float radialShape(int n, int l, float r) {
+          float rho = (2.0 * r) / float(n);
+          int k = n - l - 1;
+          return exp(-0.5 * rho) * pow(max(rho, 0.0), float(l)) * assocLaguerre(k, 2 * l + 1, rho);
+        }
+
         float psi(vec3 p) {
+          int n = int(uN + 0.5);
+          int l = int(uL + 0.5);
+          int m = int(uM > 0.0 ? floor(uM + 0.5) : ceil(uM - 0.5));
+
           float r = length(p);
-          return p.z * exp(-0.5 * r);
+          if (r < 1e-6) {
+            if (l > 0) return 0.0;
+            return radialShape(n, l, 0.0) * realYlm(l, m, 0.0, 0.0);
+          }
+
+          float theta = acos(clamp(p.z / r, -1.0, 1.0));
+          float phi = atan(p.y, p.x);
+          return radialShape(n, l, r) * realYlm(l, m, theta, phi);
         }
 
         // Intersect ray with axis-aligned box in local/object space.
@@ -372,7 +773,6 @@
 
           vec3 ro = (uInvModelMatrix * vec4(roWorld, 1.0)).xyz;
           vec3 rd = normalize((uInvModelMatrix * vec4(rdWorld, 0.0)).xyz);
-
           float tEntry;
           float tExit;
           if (!intersectBox(ro, rd, uBoxMin, uBoxMax, tEntry, tExit)) {
@@ -454,12 +854,49 @@
     });
 
     const raymarchCube = new THREE.Mesh(
-      new THREE.BoxGeometry(volumeHalfExtent * 2.0, volumeHalfExtent * 2.0, volumeHalfExtent * 2.0),
+      new THREE.BoxGeometry(currentVolumeHalfExtent * 2.0, currentVolumeHalfExtent * 2.0, currentVolumeHalfExtent * 2.0),
       raymarchMat
     );
     raymarchCube.renderOrder = 10;
     raymarchCube.visible = params.showIsosurfaces;
     scene.add(raymarchCube);
+
+    function updateSpatialScaleAndCamera(reframeCamera = true) {
+      currentVolumeHalfExtent = computeRaymarchHalfExtent(orbitalState.n, orbitalState.l);
+
+      raymarchUniforms.uBoxMin.value.set(
+        -currentVolumeHalfExtent,
+        -currentVolumeHalfExtent,
+        -currentVolumeHalfExtent
+      );
+      raymarchUniforms.uBoxMax.value.set(
+        currentVolumeHalfExtent,
+        currentVolumeHalfExtent,
+        currentVolumeHalfExtent
+      );
+
+      raymarchCube.geometry.dispose();
+      raymarchCube.geometry = new THREE.BoxGeometry(
+        currentVolumeHalfExtent * 2.0,
+        currentVolumeHalfExtent * 2.0,
+        currentVolumeHalfExtent * 2.0
+      );
+
+      if (!reframeCamera) return;
+
+      const viewDir = new THREE.Vector3().copy(camera.position).sub(controls.target);
+      if (viewDir.lengthSq() < 1e-8) viewDir.set(1.0, 0.75, 1.0);
+      viewDir.normalize();
+
+      const desiredDistance = Math.max(14.0, 2.35 * currentVolumeHalfExtent);
+      camera.position.copy(controls.target).addScaledVector(viewDir, desiredDistance);
+
+      controls.minDistance = Math.max(3.0, 0.45 * currentVolumeHalfExtent);
+      controls.maxDistance = Math.max(80.0, 12.0 * currentVolumeHalfExtent);
+      camera.near = Math.max(0.05, 0.01 * currentVolumeHalfExtent);
+      camera.far = Math.max(500.0, 25.0 * currentVolumeHalfExtent);
+      camera.updateProjectionMatrix();
+    }
 
     function syncPointMaterialUniforms() {
       if (!posPointMat || !negPointMat) return;
@@ -478,19 +915,123 @@
     }
 
     function syncRaymarchUniforms() {
-      raymarchUniforms.uIso.value = params.isoValue;
+      raymarchUniforms.uIso.value = isoAbsolute;
       raymarchUniforms.uRayStepCount.value = Math.max(1, params.rayStepCount);
-      raymarchUniforms.uStepSize.value = params.rayStepSize;
+      raymarchUniforms.uStepSize.value = Math.max(1e-4, params.rayStepRelative * currentVolumeHalfExtent);
       raymarchUniforms.uSurfaceOpacity.value = params.surfaceOpacity;
+      raymarchUniforms.uN.value = orbitalState.n;
+      raymarchUniforms.uL.value = orbitalState.l;
+      raymarchUniforms.uM.value = orbitalState.m;
       raymarchUniforms.uPosColor.value.set(params.positiveColor);
       raymarchUniforms.uNegColor.value.set(params.negativeColor);
     }
 
+    function setAxesVisible(visible) {
+      axisLines.visible = visible;
+      xLabel.visible = visible;
+      yLabel.visible = visible;
+      zLabel.visible = visible;
+    }
+
+    clampOrbitalState();
+    updateOrbitalName();
+    updateSpatialScaleAndCamera(true);
+    updateIsoAbsoluteFromRadialMax();
+    updateHud();
     rebuildPointClouds(params.pointCount);
     syncPointMaterialUniforms();
     syncRaymarchUniforms();
+    setAxesVisible(params.showAxes);
 
-    const gui = new GUI({ title: '2p_z Controls' });
+    const gui = new GUI({ title: 'Hydrogen n,l,m Controls' });
+
+    function openHelpModal() {
+      helpModal.classList.add('open');
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove('open');
+    }
+
+    function saveBlob(blob, fileName) {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    }
+
+    function exportImagePng() {
+      const menuDisplay = gui.domElement.style.display;
+      const hudDisplay = hudText.style.display;
+      const helpWasOpen = helpModal.classList.contains('open');
+
+      // Hide menu/overlay UI while capturing so export is rendering-only.
+      gui.domElement.style.display = 'none';
+      hudText.style.display = 'none';
+      closeHelpModal();
+
+      renderer.render(scene, camera);
+      const fileName = `hydrogen_orbital_n${orbitalState.n}_l${orbitalState.l}_m${orbitalState.m}.png`;
+
+      if (renderer.domElement.toBlob) {
+        renderer.domElement.toBlob((blob) => {
+          if (blob) saveBlob(blob, fileName);
+          gui.domElement.style.display = menuDisplay;
+          hudText.style.display = hudDisplay;
+          if (helpWasOpen) openHelpModal();
+        }, 'image/png');
+      } else {
+        const a = document.createElement('a');
+        a.href = renderer.domElement.toDataURL('image/png');
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        gui.domElement.style.display = menuDisplay;
+        hudText.style.display = hudDisplay;
+        if (helpWasOpen) openHelpModal();
+      }
+    }
+
+    helpButton.addEventListener('click', openHelpModal);
+    exportButton.addEventListener('click', exportImagePng);
+    helpCloseButton.addEventListener('click', closeHelpModal);
+    helpModal.addEventListener('click', (event) => {
+      if (event.target === helpModal) closeHelpModal();
+    });
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeHelpModal();
+    });
+
+    const qFolder = gui.addFolder('quantum numbers');
+    const nCtrl = qFolder.add(params, 'n', 1, 6, 1).name('n');
+    const lCtrl = qFolder.add(params, 'l', 0, 5, 1).name('l');
+    const mCtrl = qFolder.add(params, 'm', -5, 5, 1).name('m');
+    const orbitalNameCtrl = qFolder.add(params, 'orbitalName').name('Orbital name');
+    orbitalNameCtrl.disable();
+
+    function applyOrbitalChange() {
+      clampOrbitalState();
+      updateOrbitalName();
+      updateSpatialScaleAndCamera(true);
+      updateIsoAbsoluteFromRadialMax();
+      nCtrl.updateDisplay();
+      lCtrl.updateDisplay();
+      mCtrl.updateDisplay();
+      orbitalNameCtrl.updateDisplay();
+      updateHud();
+      rebuildPointClouds(params.pointCount);
+      syncPointMaterialUniforms();
+      syncRaymarchUniforms();
+    }
+
+    nCtrl.onChange(applyOrbitalChange);
+    lCtrl.onChange(applyOrbitalChange);
+    mCtrl.onChange(applyOrbitalChange);
 
     gui.add(params, 'showPointCloud').name('show point cloud').onChange((v) => {
       pointGroup.visible = v;
@@ -499,25 +1040,36 @@
     gui.add(params, 'showIsosurfaces').name('show isosurfaces').onChange((v) => {
       raymarchCube.visible = v;
     });
+    gui.add(params, 'showAxes').name('show axes').onChange((v) => {
+      setAxesVisible(v);
+    });
 
-    gui.add(params, 'isoValue', 0.005, 0.2, 0.001).name('iso value').onChange(syncRaymarchUniforms);
+    const isoFolder = gui.addFolder('isosurface');
+    isoFolder.close();
+    isoFolder.add(params, 'isoRelative', 0.0, 0.3, 0.001).name('iso rel (R max)').onChange(() => {
+      isoAbsolute = params.isoRelative * maxAbsRadial;
+      updateHud();
+      syncRaymarchUniforms();
+    });
 
-    gui.add(params, 'pointCount', 1000, 180000, 1000).name('point count').onFinishChange((v) => {
+    const pointFolder = gui.addFolder('point cloud');
+    pointFolder.close();
+    pointFolder.add(params, 'pointCount', 1000, 300000, 1000).name('point count').onFinishChange((v) => {
       params.pointCount = Math.floor(v);
       rebuildPointClouds(params.pointCount);
       syncPointMaterialUniforms();
     });
 
-    gui.add(params, 'pointSize', 2.0, 48.0, 0.1).name('point size').onChange(syncPointMaterialUniforms);
-    gui.add(params, 'pointOpacity', 0.01, 1.0, 0.01).name('point opacity').onChange(syncPointMaterialUniforms);
-    gui.add(params, 'splatSharpness', 1.0, 80.0, 0.1).name('splat sharpness').onChange(syncPointMaterialUniforms);
+    pointFolder.add(params, 'pointSize', 2.0, 48.0, 0.1).name('point size').onChange(syncPointMaterialUniforms);
+    pointFolder.add(params, 'pointOpacity', 0.01, 1.0, 0.01).name('point opacity').onChange(syncPointMaterialUniforms);
+    pointFolder.add(params, 'splatSharpness', 1.0, 80.0, 0.1).name('splat sharpness').onChange(syncPointMaterialUniforms);
 
-    gui.add(params, 'rayStepCount', 16, 1024, 1).name('ray step count').onChange(syncRaymarchUniforms);
-    gui.add(params, 'rayStepSize', 0.02, 1.0, 0.005).name('ray step size').onChange(syncRaymarchUniforms);
-    gui.add(params, 'surfaceOpacity', 0.02, 1.0, 0.01).name('surface opacity').onChange(syncRaymarchUniforms);
-    gui.add(params, 'lightOffsetRight', -60.0, 60.0, 0.1).name('light right');
-    gui.add(params, 'lightOffsetUp', -60.0, 60.0, 0.1).name('light up');
-    gui.add(params, 'lightOffsetForward', -60.0, 60.0, 0.1).name('light forward');
+    isoFolder.add(params, 'rayStepCount', 16, 1024, 1).name('ray step count').onChange(syncRaymarchUniforms);
+    isoFolder.add(params, 'rayStepRelative', 0.0005, 0.05, 0.0001).name('ray step rel').onChange(syncRaymarchUniforms);
+    isoFolder.add(params, 'surfaceOpacity', 0.02, 1.0, 0.01).name('surface opacity').onChange(syncRaymarchUniforms);
+    isoFolder.add(params, 'lightOffsetRight', -60.0, 60.0, 0.1).name('light right');
+    isoFolder.add(params, 'lightOffsetUp', -60.0, 60.0, 0.1).name('light up');
+    isoFolder.add(params, 'lightOffsetForward', -60.0, 60.0, 0.1).name('light forward');
 
     gui.addColor(params, 'positiveColor').name('positive color').onChange(() => {
       syncPointMaterialUniforms();
@@ -529,10 +1081,15 @@
       syncRaymarchUniforms();
     });
 
+    // Keep Help directly under the GUI menu regardless of folder toggles.
+    gui.domElement.appendChild(helpButton);
+    gui.domElement.appendChild(exportButton);
+
     function onResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      controls.handleResize();
     }
     window.addEventListener('resize', onResize);
 
@@ -562,7 +1119,7 @@
     animate();
 
     // Initial informational log for quick sanity checks in browser devtools.
-    console.info('2p_z orbital page ready. Serve with: python -m http.server');
+    console.info('Hydrogen orbital explorer ready. Serve with: python -m http.server');
   </script>
 </body>
 </html>

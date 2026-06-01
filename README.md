@@ -9,7 +9,7 @@ This project provides a self-contained web page for visualizing **real hydrogen 
 
 ## File
 
-- `index_general_orbitals.html` (main app, no build step)
+- `index.html` (main app, no build step)
 
 ## Run Locally
 
@@ -21,7 +21,18 @@ python -m http.server
 
 Open:
 
-- `http://localhost:8000/index_general_orbitals.html`
+- `http://localhost:8000/index.html`
+
+## GitHub Pages CI
+
+This repository includes a GitHub Actions workflow at:
+
+- `.github/workflows/deploy-pages.yml`
+
+Behavior:
+
+- Runs on pushes to `main` (and manual dispatch).
+- Publishes `index.html` as the GitHub Pages entry file.
 
 ## Main Controls
 
