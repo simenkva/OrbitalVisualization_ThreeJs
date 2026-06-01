@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hydrogen Orbital Explorer (Real n,l,m)</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #06080d;
+      color: #e6edf7;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+    }
+
+    .hud {
+      position: fixed;
+      left: 10px;
+      bottom: 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #9bb0c8;
+      pointer-events: none;
+      background: rgba(6, 8, 13, 0.55);
+      border: 1px solid rgba(143, 170, 204, 0.25);
+      border-radius: 6px;
+      padding: 8px 10px;
+      backdrop-filter: blur(2px);
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.20/+esm"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud" id="hudText"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import GUI from 'lil-gui';
+
+    const app = document.getElementById('app');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x06080d);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500.0);
+    camera.position.set(24, 18, 24);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    app.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0, 0);
+    controls.enableDamping = true;
+    controls.minDistance = 12.0;
+    controls.maxDistance = 140.0;
+
+    const axisLength = 8.0;
+    const axisGeom = new THREE.BufferGeometry();
+    axisGeom.setAttribute(
+      'position',
+      new THREE.BufferAttribute(
+        new Float32Array([
+          0, 0, 0, axisLength, 0, 0,
+          0, 0, 0, 0, axisLength, 0,
+          0, 0, 0, 0, 0, axisLength
+        ]),
+        3
+      )
+    );
+    const axisMat = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false
+    });
+    const axisLines = new THREE.LineSegments(axisGeom, axisMat);
+    axisLines.renderOrder = 10;
+    scene.add(axisLines);
+
+    function createAxisLabel(text) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 92px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, canvas.width * 0.5, canvas.height * 0.5 + 2);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false
+      });
+
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(1.45, 1.45, 1.0);
+      sprite.renderOrder = 11;
+      return sprite;
+    }
+
+    const axisLabelOffset = 0.9;
+    const xLabel = createAxisLabel('x');
+    xLabel.position.set(axisLength + axisLabelOffset, 0, 0);
+    scene.add(xLabel);
+
+    const yLabel = createAxisLabel('y');
+    yLabel.position.set(0, axisLength + axisLabelOffset, 0);
+    scene.add(yLabel);
+
+    const zLabel = createAxisLabel('z');
+    zLabel.position.set(0, 0, axisLength + axisLabelOffset);
+    scene.add(zLabel);
+
+    const pointGroup = new THREE.Group();
+    scene.add(pointGroup);
+
+    const params = {
+      n: 2,
+      l: 1,
+      m: 0,
+      showPointCloud: true,
+      showIsosurfaces: true,
+      isoValue: 0.08,
+      pointCount: 70000,
+      pointSize: 24.0,
+      pointOpacity: 0.42,
+      splatSharpness: 18.0,
+      rayStepCount: 640,
+      rayStepSize: 0.10,
+      surfaceOpacity: 0.55,
+      lightOffsetRight: -20.0,
+      lightOffsetUp: 18.0,
+      lightOffsetForward: 8.0,
+      positiveColor: '#3fa0ff',
+      negativeColor: '#ff6347'
+    };
+
+    const volumeHalfExtent = 20.0;
+    const hudText = document.getElementById('hudText');
+    const orbitalState = { n: 2, l: 1, m: 0 };
+
+    function clampOrbitalState() {
+      let n = Math.round(params.n);
+      n = Math.max(1, Math.min(6, n));
+
+      let l = Math.round(params.l);
+      l = Math.max(0, Math.min(n - 1, l));
+
+      let m = Math.round(params.m);
+      m = Math.max(-l, Math.min(l, m));
+
+      params.n = n;
+      params.l = l;
+      params.m = m;
+      orbitalState.n = n;
+      orbitalState.l = l;
+      orbitalState.m = m;
+    }
+
+    function updateHud() {
+      hudText.textContent =
+        `Hydrogen real orbital: n=${orbitalState.n}, l=${orbitalState.l}, m=${orbitalState.m} | ` +
+        `psi(r,theta,phi) = R_nl(r) * Y_lm_real(theta,phi)`;
+    }
+
+    function factorialInt(n) {
+      let f = 1;
+      for (let i = 2; i <= n; i++) f *= i;
+      return f;
+    }
+
+    function assocLaguerre(k, alpha, x) {
+      if (k === 0) return 1.0;
+      if (k === 1) return 1.0 + alpha - x;
+
+      let lm2 = 1.0;
+      let lm1 = 1.0 + alpha - x;
+      let lk = lm1;
+      for (let i = 2; i <= k; i++) {
+        lk = ((2 * i - 1 + alpha - x) * lm1 - (i - 1 + alpha) * lm2) / i;
+        lm2 = lm1;
+        lm1 = lk;
+      }
+      return lk;
+    }
+
+    function assocLegendre(l, m, x) {
+      if (m < 0 || m > l) return 0.0;
+      const xc = Math.max(-1.0, Math.min(1.0, x));
+
+      let pmm = 1.0;
+      if (m > 0) {
+        const somx2 = Math.sqrt(Math.max(0.0, 1.0 - xc * xc));
+        let fact = 1.0;
+        for (let i = 1; i <= m; i++) {
+          pmm *= -fact * somx2;
+          fact += 2.0;
+        }
+      }
+      if (l === m) return pmm;
+
+      let pmmp1 = xc * (2 * m + 1) * pmm;
+      if (l === m + 1) return pmmp1;
+
+      let pll = pmmp1;
+      let pprev = pmm;
+      let pcurr = pmmp1;
+      for (let ll = m + 2; ll <= l; ll++) {
+        pll = ((2 * ll - 1) * xc * pcurr - (ll + m - 1) * pprev) / (ll - m);
+        pprev = pcurr;
+        pcurr = pll;
+      }
+      return pll;
+    }
+
+    function realSphericalHarmonic(l, m, theta, phi) {
+      const mAbs = Math.abs(m);
+      const ct = Math.cos(theta);
+      const p = assocLegendre(l, mAbs, ct);
+      const norm = Math.sqrt(
+        ((2 * l + 1) / (4 * Math.PI)) *
+        (factorialInt(l - mAbs) / factorialInt(l + mAbs))
+      );
+
+      if (m > 0) return Math.SQRT2 * norm * p * Math.cos(mAbs * phi);
+      if (m < 0) return Math.SQRT2 * norm * p * Math.sin(mAbs * phi);
+      return norm * p;
+    }
+
+    function radialShapeHydrogen(n, l, r) {
+      const rho = (2.0 * r) / n;
+      const k = n - l - 1;
+      return Math.exp(-0.5 * rho) * Math.pow(Math.max(rho, 0.0), l) * assocLaguerre(k, 2 * l + 1, rho);
+    }
+
+    function psiRealHydrogenCartesian(x, y, z, n, l, m) {
+      const r = Math.hypot(x, y, z);
+      if (r < 1e-8) {
+        if (l > 0) return 0.0;
+        return radialShapeHydrogen(n, l, 0.0) * realSphericalHarmonic(l, m, 0.0, 0.0);
+      }
+
+      const ct = Math.max(-1.0, Math.min(1.0, z / r));
+      const theta = Math.acos(ct);
+      const phi = Math.atan2(y, x);
+      return radialShapeHydrogen(n, l, r) * realSphericalHarmonic(l, m, theta, phi);
+    }
+
+    function sampleStandardNormal() {
+      const u1 = Math.max(Math.random(), 1e-12);
+      const u2 = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+    }
+
+    // Generic |psi| sampling for arbitrary real hydrogen orbitals:
+    // We use a Metropolis random walk in 3D with target density proportional to |psi|.
+    // Positive and negative phase are then separated by sign(psi) at each accepted sample.
+    function generateOrbitalSamples(totalCount, n, l, m) {
+      const pos = [];
+      const neg = [];
+      const targetCount = Math.max(1000, Math.floor(totalCount));
+      const stepSigma = Math.max(0.8, 0.50 * n * n);
+      const safetyMaxRadius = Math.max(120.0, 12.0 * n * n);
+
+      let cx = (Math.random() * 2.0 - 1.0) * 0.5;
+      let cy = (Math.random() * 2.0 - 1.0) * 0.5;
+      let cz = (Math.random() * 2.0 - 1.0) * 0.5;
+      let cAbs = Math.abs(psiRealHydrogenCartesian(cx, cy, cz, n, l, m)) + 1e-14;
+
+      const burnIn = 2500;
+      const thin = 2;
+      const maxIterations = burnIn + targetCount * 200;
+      let savedSteps = 0;
+
+      for (let iter = 0; iter < maxIterations; iter++) {
+        const nx = cx + stepSigma * sampleStandardNormal();
+        const ny = cy + stepSigma * sampleStandardNormal();
+        const nz = cz + stepSigma * sampleStandardNormal();
+        const nr = Math.hypot(nx, ny, nz);
+        // Do not clip to the render volume or any tight sphere; that distorts the
+        // orbital cloud. Keep only a very loose safety bound for random-walk stability.
+        if (nr < safetyMaxRadius) {
+          const nAbs = Math.abs(psiRealHydrogenCartesian(nx, ny, nz, n, l, m)) + 1e-14;
+          const ratio = nAbs / cAbs;
+          if (ratio >= 1.0 || Math.random() < ratio) {
+            cx = nx;
+            cy = ny;
+            cz = nz;
+            cAbs = nAbs;
+          }
+        }
+
+        if (iter < burnIn) continue;
+        savedSteps++;
+        if (savedSteps % thin !== 0) continue;
+
+        const psi = psiRealHydrogenCartesian(cx, cy, cz, n, l, m);
+        if (psi >= 0.0) {
+          pos.push(cx, cy, cz);
+        } else {
+          neg.push(cx, cy, cz);
+        }
+
+        if ((pos.length + neg.length) / 3 >= targetCount) break;
+      }
+
+      return {
+        positive: new Float32Array(pos),
+        negative: new Float32Array(neg)
+      };
+    }
+
+    function makePointCloudMaterial(baseColor) {
+      const color = new THREE.Color(baseColor);
+
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uSize: { value: params.pointSize },
+          uOpacity: { value: params.pointOpacity },
+          uSharpness: { value: params.splatSharpness },
+          uColor: { value: color }
+        },
+        vertexShader: /* glsl */`
+          uniform float uSize;
+          void main() {
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            gl_Position = projectionMatrix * mv;
+            gl_PointSize = uSize;
+          }
+        `,
+        fragmentShader: /* glsl */`
+          uniform float uOpacity;
+          uniform float uSharpness;
+          uniform vec3 uColor;
+
+          void main() {
+            // Gaussian splat in screen-space point sprite coordinates.
+            // gl_PointCoord is in [0,1]^2 over the rendered point square.
+            vec2 p = gl_PointCoord - vec2(0.5);
+            float rr = dot(p, p);
+            float alpha = uOpacity * exp(-uSharpness * rr);
+            if (alpha < 0.002) discard;
+            gl_FragColor = vec4(uColor, alpha);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        // Keep splats visually stable against other transparent layers.
+        // With additive blending, disabling depth test avoids angle-dependent
+        // visibility flips caused by transparent sorting interactions.
+        depthTest: false
+      });
+    }
+
+    let posPoints = null;
+    let negPoints = null;
+    let posPointMat = null;
+    let negPointMat = null;
+
+    function rebuildPointClouds(totalCount) {
+      if (posPoints) {
+        pointGroup.remove(posPoints);
+        posPoints.geometry.dispose();
+        posPointMat.dispose();
+        posPoints = null;
+      }
+      if (negPoints) {
+        pointGroup.remove(negPoints);
+        negPoints.geometry.dispose();
+        negPointMat.dispose();
+        negPoints = null;
+      }
+
+      const samples = generateOrbitalSamples(totalCount, orbitalState.n, orbitalState.l, orbitalState.m);
+
+      const posGeom = new THREE.BufferGeometry();
+      posGeom.setAttribute('position', new THREE.BufferAttribute(samples.positive, 3));
+      posPointMat = makePointCloudMaterial(params.positiveColor);
+      posPoints = new THREE.Points(posGeom, posPointMat);
+      posPoints.renderOrder = 20;
+
+      const negGeom = new THREE.BufferGeometry();
+      negGeom.setAttribute('position', new THREE.BufferAttribute(samples.negative, 3));
+      negPointMat = makePointCloudMaterial(params.negativeColor);
+      negPoints = new THREE.Points(negGeom, negPointMat);
+      negPoints.renderOrder = 20;
+
+      pointGroup.add(posPoints, negPoints);
+      pointGroup.visible = params.showPointCloud;
+    }
+
+    const raymarchUniforms = {
+      uIso: { value: params.isoValue },
+      uRayStepCount: { value: params.rayStepCount },
+      uStepSize: { value: params.rayStepSize },
+      uSurfaceOpacity: { value: params.surfaceOpacity },
+      uN: { value: orbitalState.n },
+      uL: { value: orbitalState.l },
+      uM: { value: orbitalState.m },
+      uBoxMin: { value: new THREE.Vector3(-volumeHalfExtent, -volumeHalfExtent, -volumeHalfExtent) },
+      uBoxMax: { value: new THREE.Vector3(volumeHalfExtent, volumeHalfExtent, volumeHalfExtent) },
+      uPosColor: { value: new THREE.Color(params.positiveColor) },
+      uNegColor: { value: new THREE.Color(params.negativeColor) },
+      uInvModelMatrix: { value: new THREE.Matrix4() },
+      uModelMatrixWorld: { value: new THREE.Matrix4() },
+      uNormalMatrixWorld: { value: new THREE.Matrix3() },
+      uCamRight: { value: new THREE.Vector3(1, 0, 0) },
+      uCamUp: { value: new THREE.Vector3(0, 1, 0) },
+      uCamForward: { value: new THREE.Vector3(0, 0, -1) },
+      uLightWorldPos: { value: new THREE.Vector3() }
+    };
+
+    const raymarchMat = new THREE.ShaderMaterial({
+      uniforms: raymarchUniforms,
+      vertexShader: /* glsl */`
+        varying vec3 vWorldPos;
+        void main() {
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          vWorldPos = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: /* glsl */`
+        precision highp float;
+        precision highp int;
+
+        varying vec3 vWorldPos;
+
+        uniform float uIso;
+        uniform float uRayStepCount;
+        uniform float uStepSize;
+        uniform float uSurfaceOpacity;
+        uniform float uN;
+        uniform float uL;
+        uniform float uM;
+        uniform vec3 uBoxMin;
+        uniform vec3 uBoxMax;
+        uniform vec3 uPosColor;
+        uniform vec3 uNegColor;
+        uniform mat4 uInvModelMatrix;
+        uniform mat4 uModelMatrixWorld;
+        uniform mat3 uNormalMatrixWorld;
+        uniform vec3 uCamRight;
+        uniform vec3 uCamUp;
+        uniform vec3 uCamForward;
+        uniform vec3 uLightWorldPos;
+
+        float fact(int n) {
+          float f = 1.0;
+          for (int i = 2; i <= 16; i++) {
+            if (i > n) break;
+            f *= float(i);
+          }
+          return f;
+        }
+
+        float assocLaguerre(int k, int alpha, float x) {
+          if (k == 0) return 1.0;
+          if (k == 1) return 1.0 + float(alpha) - x;
+          float lm2 = 1.0;
+          float lm1 = 1.0 + float(alpha) - x;
+          float lk = lm1;
+          for (int i = 2; i <= 20; i++) {
+            if (i > k) break;
+            float fi = float(i);
+            lk = ((2.0 * fi - 1.0 + float(alpha) - x) * lm1 - (fi - 1.0 + float(alpha)) * lm2) / fi;
+            lm2 = lm1;
+            lm1 = lk;
+          }
+          return lk;
+        }
+
+        float assocLegendre(int l, int m, float x) {
+          float xc = clamp(x, -1.0, 1.0);
+          float pmm = 1.0;
+          if (m > 0) {
+            float somx2 = sqrt(max(0.0, 1.0 - xc * xc));
+            float pref = 1.0;
+            for (int i = 1; i <= 12; i++) {
+              if (i > m) break;
+              pmm *= -pref * somx2;
+              pref += 2.0;
+            }
+          }
+          if (l == m) return pmm;
+
+          float pmmp1 = xc * float(2 * m + 1) * pmm;
+          if (l == m + 1) return pmmp1;
+
+          float pll = pmmp1;
+          float pprev = pmm;
+          float pcurr = pmmp1;
+          for (int ll = 2; ll <= 16; ll++) {
+            if (ll <= m + 1) continue;
+            if (ll > l) break;
+            pll = (float(2 * ll - 1) * xc * pcurr - float(ll + m - 1) * pprev) / float(ll - m);
+            pprev = pcurr;
+            pcurr = pll;
+          }
+          return pll;
+        }
+
+        float realYlm(int l, int m, float theta, float phi) {
+          int ma = abs(m);
+          float p = assocLegendre(l, ma, cos(theta));
+          float norm = sqrt(((2.0 * float(l) + 1.0) / (4.0 * 3.141592653589793)) * (fact(l - ma) / fact(l + ma)));
+          if (m > 0) return 1.4142135623730951 * norm * p * cos(float(ma) * phi);
+          if (m < 0) return 1.4142135623730951 * norm * p * sin(float(ma) * phi);
+          return norm * p;
+        }
+
+        float radialShape(int n, int l, float r) {
+          float rho = (2.0 * r) / float(n);
+          int k = n - l - 1;
+          return exp(-0.5 * rho) * pow(max(rho, 0.0), float(l)) * assocLaguerre(k, 2 * l + 1, rho);
+        }
+
+        float psi(vec3 p) {
+          int n = int(uN + 0.5);
+          int l = int(uL + 0.5);
+          int m = int(uM > 0.0 ? floor(uM + 0.5) : ceil(uM - 0.5));
+
+          float r = length(p);
+          if (r < 1e-6) {
+            if (l > 0) return 0.0;
+            return radialShape(n, l, 0.0) * realYlm(l, m, 0.0, 0.0);
+          }
+
+          float theta = acos(clamp(p.z / r, -1.0, 1.0));
+          float phi = atan(p.y, p.x);
+          return radialShape(n, l, r) * realYlm(l, m, theta, phi);
+        }
+
+        // Intersect ray with axis-aligned box in local/object space.
+        bool intersectBox(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float tNear, out float tFar) {
+          vec3 t0 = (bmin - ro) / rd;
+          vec3 t1 = (bmax - ro) / rd;
+          vec3 tmin3 = min(t0, t1);
+          vec3 tmax3 = max(t0, t1);
+
+          tNear = max(max(tmin3.x, tmin3.y), tmin3.z);
+          tFar = min(min(tmax3.x, tmax3.y), tmax3.z);
+          return tFar >= max(tNear, 0.0);
+        }
+
+        // Finite-difference gradient of psi for normal estimation at the hit point.
+        vec3 gradPsi(vec3 p) {
+          float e = 0.05;
+          float dx = psi(p + vec3(e, 0.0, 0.0)) - psi(p - vec3(e, 0.0, 0.0));
+          float dy = psi(p + vec3(0.0, e, 0.0)) - psi(p - vec3(0.0, e, 0.0));
+          float dz = psi(p + vec3(0.0, 0.0, e)) - psi(p - vec3(0.0, 0.0, e));
+          return vec3(dx, dy, dz);
+        }
+
+        void main() {
+          vec3 roWorld = cameraPosition;
+          vec3 rdWorld = normalize(vWorldPos - roWorld);
+
+          vec3 ro = (uInvModelMatrix * vec4(roWorld, 1.0)).xyz;
+          vec3 rd = normalize((uInvModelMatrix * vec4(rdWorld, 0.0)).xyz);
+          float tEntry;
+          float tExit;
+          if (!intersectBox(ro, rd, uBoxMin, uBoxMax, tEntry, tExit)) {
+            discard;
+          }
+
+          float t = max(tEntry, 0.0) + 1e-3;
+          float prevT = t;
+          float prevVal = abs(psi(ro + rd * t)) - uIso;
+
+          bool hit = false;
+          float hitT = 0.0;
+
+          // Raymarch threshold test:
+          // find a sign change in f(t)=abs(psi(ro+rd*t))-iso, then bisection-refine that crossing.
+          const int MAX_STEPS = 1024;
+          for (int i = 0; i < MAX_STEPS; i++) {
+            if (float(i) >= uRayStepCount) break;
+
+            t += uStepSize;
+            if (t > tExit) break;
+
+            float val = abs(psi(ro + rd * t)) - uIso;
+
+            if ((prevVal <= 0.0 && val >= 0.0) || (prevVal >= 0.0 && val <= 0.0)) {
+              float a = prevT;
+              float b = t;
+              for (int j = 0; j < 5; j++) {
+                float m = 0.5 * (a + b);
+                float fm = abs(psi(ro + rd * m)) - uIso;
+                float fa = abs(psi(ro + rd * a)) - uIso;
+                if (fa * fm <= 0.0) {
+                  b = m;
+                } else {
+                  a = m;
+                }
+              }
+              hitT = 0.5 * (a + b);
+              hit = true;
+              break;
+            }
+
+            prevT = t;
+            prevVal = val;
+          }
+
+          if (!hit) {
+            discard;
+          }
+
+          vec3 pLocal = ro + rd * hitT;
+          float psiVal = psi(pLocal);
+
+          // Preserve phase at the hit: positive lobe uses uPosColor, negative lobe uses uNegColor.
+          vec3 baseColor = psiVal >= 0.0 ? uPosColor : uNegColor;
+
+          vec3 nLocal = normalize(gradPsi(pLocal));
+          if (dot(nLocal, rd) > 0.0) nLocal = -nLocal;
+          vec3 nWorld = normalize(uNormalMatrixWorld * nLocal);
+
+          vec3 pWorld = (uModelMatrixWorld * vec4(pLocal, 1.0)).xyz;
+          vec3 lightDirA = normalize(uLightWorldPos - pWorld);
+          vec3 lightDirB = normalize(-lightDirA + 0.25 * uCamUp);
+          vec3 viewDir = normalize(roWorld - pWorld);
+
+          float diffA = max(dot(nWorld, lightDirA), 0.0);
+          float diffB = 0.35 * max(dot(nWorld, lightDirB), 0.0);
+          vec3 halfDir = normalize(lightDirA + viewDir);
+          float spec = pow(max(dot(nWorld, halfDir), 0.0), 28.0);
+
+          vec3 color = baseColor * (0.18 + diffA + diffB) + vec3(1.0) * (0.25 * spec);
+          gl_FragColor = vec4(color, uSurfaceOpacity);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide
+    });
+
+    const raymarchCube = new THREE.Mesh(
+      new THREE.BoxGeometry(volumeHalfExtent * 2.0, volumeHalfExtent * 2.0, volumeHalfExtent * 2.0),
+      raymarchMat
+    );
+    raymarchCube.renderOrder = 10;
+    raymarchCube.visible = params.showIsosurfaces;
+    scene.add(raymarchCube);
+
+    function syncPointMaterialUniforms() {
+      if (!posPointMat || !negPointMat) return;
+
+      posPointMat.uniforms.uSize.value = params.pointSize;
+      negPointMat.uniforms.uSize.value = params.pointSize;
+
+      posPointMat.uniforms.uOpacity.value = params.pointOpacity;
+      negPointMat.uniforms.uOpacity.value = params.pointOpacity;
+
+      posPointMat.uniforms.uSharpness.value = params.splatSharpness;
+      negPointMat.uniforms.uSharpness.value = params.splatSharpness;
+
+      posPointMat.uniforms.uColor.value.set(params.positiveColor);
+      negPointMat.uniforms.uColor.value.set(params.negativeColor);
+    }
+
+    function syncRaymarchUniforms() {
+      raymarchUniforms.uIso.value = params.isoValue;
+      raymarchUniforms.uRayStepCount.value = Math.max(1, params.rayStepCount);
+      raymarchUniforms.uStepSize.value = params.rayStepSize;
+      raymarchUniforms.uSurfaceOpacity.value = params.surfaceOpacity;
+      raymarchUniforms.uN.value = orbitalState.n;
+      raymarchUniforms.uL.value = orbitalState.l;
+      raymarchUniforms.uM.value = orbitalState.m;
+      raymarchUniforms.uPosColor.value.set(params.positiveColor);
+      raymarchUniforms.uNegColor.value.set(params.negativeColor);
+    }
+
+    clampOrbitalState();
+    updateHud();
+    rebuildPointClouds(params.pointCount);
+    syncPointMaterialUniforms();
+    syncRaymarchUniforms();
+
+    const gui = new GUI({ title: 'Hydrogen n,l,m Controls' });
+
+    const qFolder = gui.addFolder('quantum numbers');
+    const nCtrl = qFolder.add(params, 'n', 1, 6, 1).name('n');
+    const lCtrl = qFolder.add(params, 'l', 0, 5, 1).name('l');
+    const mCtrl = qFolder.add(params, 'm', -5, 5, 1).name('m');
+
+    function applyOrbitalChange() {
+      clampOrbitalState();
+      nCtrl.updateDisplay();
+      lCtrl.updateDisplay();
+      mCtrl.updateDisplay();
+      updateHud();
+      rebuildPointClouds(params.pointCount);
+      syncPointMaterialUniforms();
+      syncRaymarchUniforms();
+    }
+
+    nCtrl.onChange(applyOrbitalChange);
+    lCtrl.onChange(applyOrbitalChange);
+    mCtrl.onChange(applyOrbitalChange);
+
+    gui.add(params, 'showPointCloud').name('show point cloud').onChange((v) => {
+      pointGroup.visible = v;
+    });
+
+    gui.add(params, 'showIsosurfaces').name('show isosurfaces').onChange((v) => {
+      raymarchCube.visible = v;
+    });
+
+    gui.add(params, 'isoValue', 0.005, 0.2, 0.001).name('iso value').onChange(syncRaymarchUniforms);
+
+    gui.add(params, 'pointCount', 1000, 180000, 1000).name('point count').onFinishChange((v) => {
+      params.pointCount = Math.floor(v);
+      rebuildPointClouds(params.pointCount);
+      syncPointMaterialUniforms();
+    });
+
+    gui.add(params, 'pointSize', 2.0, 48.0, 0.1).name('point size').onChange(syncPointMaterialUniforms);
+    gui.add(params, 'pointOpacity', 0.01, 1.0, 0.01).name('point opacity').onChange(syncPointMaterialUniforms);
+    gui.add(params, 'splatSharpness', 1.0, 80.0, 0.1).name('splat sharpness').onChange(syncPointMaterialUniforms);
+
+    gui.add(params, 'rayStepCount', 16, 1024, 1).name('ray step count').onChange(syncRaymarchUniforms);
+    gui.add(params, 'rayStepSize', 0.02, 1.0, 0.005).name('ray step size').onChange(syncRaymarchUniforms);
+    gui.add(params, 'surfaceOpacity', 0.02, 1.0, 0.01).name('surface opacity').onChange(syncRaymarchUniforms);
+    gui.add(params, 'lightOffsetRight', -60.0, 60.0, 0.1).name('light right');
+    gui.add(params, 'lightOffsetUp', -60.0, 60.0, 0.1).name('light up');
+    gui.add(params, 'lightOffsetForward', -60.0, 60.0, 0.1).name('light forward');
+
+    gui.addColor(params, 'positiveColor').name('positive color').onChange(() => {
+      syncPointMaterialUniforms();
+      syncRaymarchUniforms();
+    });
+
+    gui.addColor(params, 'negativeColor').name('negative color').onChange(() => {
+      syncPointMaterialUniforms();
+      syncRaymarchUniforms();
+    });
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', onResize);
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const _dt = clock.getDelta();
+      controls.update();
+
+      const e = camera.matrixWorld.elements;
+      raymarchUniforms.uCamRight.value.set(e[0], e[1], e[2]).normalize();
+      raymarchUniforms.uCamUp.value.set(e[4], e[5], e[6]).normalize();
+      raymarchUniforms.uCamForward.value.set(-e[8], -e[9], -e[10]).normalize();
+      raymarchUniforms.uLightWorldPos.value.copy(camera.position)
+        .addScaledVector(raymarchUniforms.uCamRight.value, params.lightOffsetRight)
+        .addScaledVector(raymarchUniforms.uCamUp.value, params.lightOffsetUp)
+        .addScaledVector(raymarchUniforms.uCamForward.value, params.lightOffsetForward);
+
+      raymarchCube.updateMatrixWorld();
+      raymarchUniforms.uModelMatrixWorld.value.copy(raymarchCube.matrixWorld);
+      raymarchUniforms.uInvModelMatrix.value.copy(raymarchCube.matrixWorld).invert();
+      raymarchUniforms.uNormalMatrixWorld.value.getNormalMatrix(raymarchCube.matrixWorld);
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Initial informational log for quick sanity checks in browser devtools.
+    console.info('Hydrogen orbital explorer ready. Serve with: python -m http.server');
+  </script>
+</body>
+</html>
