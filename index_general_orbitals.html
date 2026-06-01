@@ -50,7 +50,7 @@
 
   <script type="module">
     import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
     import GUI from 'lil-gui';
 
     const app = document.getElementById('app');
@@ -67,9 +67,12 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     app.appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new TrackballControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
-    controls.enableDamping = true;
+    controls.rotateSpeed = 3.0;
+    controls.zoomSpeed = 1.2;
+    controls.panSpeed = 0.8;
+    controls.dynamicDampingFactor = 0.12;
     controls.minDistance = 12.0;
     controls.maxDistance = 140.0;
 
@@ -852,6 +855,7 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      controls.handleResize();
     }
     window.addEventListener('resize', onResize);
 
