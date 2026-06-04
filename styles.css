@@ -12,21 +12,6 @@ html, body {
   height: 100%;
 }
 
-.hud {
-  position: fixed;
-  left: 10px;
-  bottom: 10px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #9bb0c8;
-  pointer-events: none;
-  background: rgba(6, 8, 13, 0.55);
-  border: 1px solid rgba(143, 170, 204, 0.25);
-  border-radius: 6px;
-  padding: 8px 10px;
-  backdrop-filter: blur(2px);
-}
-
 #helpButton {
   position: static;
   display: block;

@@ -11,6 +11,18 @@ This project provides a self-contained web page for visualizing **real hydrogen 
 
 - `index.html` (main app, no build step)
 
+## Source Layout
+
+- `index.html`: HTML shell and import map.
+- `styles.css`: page, modal, and control-button styling.
+- `src/main.js`: app entry point, scene setup, state coordination, render loop.
+- `src/orbitalMath.js`: hydrogen orbital math, radial scaling, and orbital names.
+- `src/sampling.js`: point sampling from the real orbital amplitude.
+- `src/sceneAxes.js`: white axes and x/y/z labels.
+- `src/pointCloud.js`: Gaussian splat point-cloud rendering.
+- `src/raymarcher.js`: raymarched orbital isosurface rendering.
+- `src/ui.js`: GUI, help modal, and image export helpers.
+
 ## Run Locally
 
 From this folder:
