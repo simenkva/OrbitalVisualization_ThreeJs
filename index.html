@@ -1008,9 +1008,9 @@
     });
 
     const qFolder = gui.addFolder('quantum numbers');
-    const nCtrl = qFolder.add(params, 'n', 1, 6, 1).name('n');
-    const lCtrl = qFolder.add(params, 'l', 0, 5, 1).name('l');
-    const mCtrl = qFolder.add(params, 'm', -5, 5, 1).name('m');
+    const nCtrl = qFolder.add(params, 'n', 1, 10, 1).name('n');
+    const lCtrl = qFolder.add(params, 'l', 0, 10, 1).name('l');
+    const mCtrl = qFolder.add(params, 'm', -10, 10, 1).name('m');
     const orbitalNameCtrl = qFolder.add(params, 'orbitalName').name('Orbital name');
     orbitalNameCtrl.disable();
 
